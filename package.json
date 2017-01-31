@@ -11,6 +11,10 @@
   "bin": {
     "cljs-boot": "./bin/cljs-boot"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gfZeng/cljs-boot.git"
+  },
   "dependencies": {
     "lumo-cljs": "*"
   }
