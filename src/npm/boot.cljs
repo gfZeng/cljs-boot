@@ -3,12 +3,7 @@
             [cljs.analyzer.api :as analy]
             [npm.mvn :as mvn]))
 
-(def PACKAGE
-  (if (js/fs.existsSync (str js/process.env.PWD "/package.json"))
-    (js->clj (js/require (str js/process.env.PWD "/package.json"))
-             :keywordize-keys true)
-    {:cljs {:source-paths ["src"]}}))
-
+(def PACKAGE (js->clj (js/require (str js/process.env.PWD "/package.json"))))
 (declare *classpath*)
 
 (defn file-seq [root]
@@ -22,7 +17,7 @@
 
 (defn ^:export lumo [& opts]
   (let [process        (atom nil)
-        source-paths   (get-in PACKAGE [:cljs :source-paths])
+        source-paths   (get-in PACKAGE ["cljs" "source-paths"])
         source-pattern (re-pattern (str \( (str/join "|" source-paths) \) "/?"))
         cache-path     (or (when (some #{"-K"} opts)
                              ".lumo_cache")
@@ -89,7 +84,7 @@
                     (apply (aget NS-EXPORTS (munge t)) args))))))
 
 (defn -main [& argv]
-  (mvn/async-map mvn/download-dep (map mvn/parse-dep (get-in PACKAGE [:cljs :dependencies]))
+  (mvn/async-map mvn/download-dep (map mvn/parse-dep (get-in PACKAGE ["cljs" "dependencies"]))
                  (fn [paths]
                    (set! *classpath* paths)
                    (run-task (argv->task argv)))))
