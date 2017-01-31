@@ -3,7 +3,11 @@
             [cljs.analyzer.api :as analy]
             [npm.mvn :as mvn]))
 
-(def PACKAGE (js->clj (js/require (str js/process.env.PWD "/package.json"))))
+(def PACKAGE
+  (if (js/fs.existsSync (str js/process.env.PWD "/package.json"))
+    (js->clj (js/require (str js/process.env.PWD "/package.json")))
+    {"cljs" {"source-paths" ["src"]}}))
+
 (declare *classpath*)
 
 (defn file-seq [root]
