@@ -1,0 +1,15 @@
+#!/bin/sh
+
+realpath() {
+    SOURCE="$1"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    echo "$SOURCE"
+}
+
+SCRIPT=`realpath "$0"`
+DIR=$(cd `dirname $SCRIPT`/..; pwd)
+exec lumo -c $DIR/src -m npm.boot "$@"

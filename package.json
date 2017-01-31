@@ -1,0 +1,17 @@
+{
+  "name": "cljs-boot",
+  "version": "1.0.3",
+  "license": "MIT",
+  "keywords": [
+    "cljs",
+    "clojurescript",
+    "clojure",
+    "boot"
+  ],
+  "bin": {
+    "cljs-boot": "./bin/cljs-boot"
+  },
+  "dependencies": {
+    "lumo-cljs": "*"
+  }
+}
