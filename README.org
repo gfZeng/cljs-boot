@@ -1,0 +1,56 @@
+* cljs-boot
+
+Inspired by [[https://github.com/boot-clj/boot][boot-clj]], It's just has some simple features currently.
+
+** Installation
+   #+begin_src sh
+   npm install -g cljs-boot
+   #+end_src
+
+** Usage
+*** Tasks
+    - lumo: a wrapper for [[https://github.com/anmonteiro/lumo][lumo]], auto invalid expired cache when enable cache
+    - watch: auto re-run tasks of subsequent when listening file changed
+
+*** Command line
+   #+begin_src sh
+   cljs-boot lumo -K -c src -m foo.bar
+
+   # auto relaunch lumo when src modified
+   cljs-boot watch -d src lumo -c src -K -m foo.bar
+   #+end_src
+
+*** As plugin for npm
+**** Features
+     - auto download cljs.dependencies from https://clojars.org/repo
+     - auto add cljs.dependencies & cljs.source-paths to classpath for lumo
+     - cljs.dependencies not support recursively, you need do it manually
+
+**** Example
+    #+begin_src json
+      {
+        "name": "app",
+        "version": "1.0.0",
+        "scripts": {
+          "start": "cljs-boot lumo -K -m app.core",
+          "dev": "cljs-boot watch -d src lumo -K -m app.core"
+        },
+        "dependencies": {
+          "cljs-boot": "^1.0.3",
+          "lumo-cljs": "*",
+          "socket.io-client": "0.9.17"
+        },
+        "cljs": {
+          "source-paths": [
+            "src"
+          ],
+          "dependencies": {
+            "andare": "0.4.0"
+          }
+        }
+      }
+    #+end_src
+
+** (cljs-boot) TODO
+   It depends to you, :-)
+
