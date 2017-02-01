@@ -12,4 +12,6 @@ realpath() {
 
 SCRIPT=`realpath "$0"`
 DIR=$(cd `dirname $SCRIPT`/..; pwd)
-exec lumo -c $DIR/src -m npm.boot "$@"
+
+# set NODE_PATH for fix lumo bug
+NODE_PATH=$DIR/node_modules:$NODE_PATH exec lumo -c $DIR/src -m npm.boot "$@"
