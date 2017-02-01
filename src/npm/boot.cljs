@@ -3,6 +3,8 @@
             [cljs.analyzer.api :as analy]
             [npm.mvn :as mvn]))
 
+(def telnet (js/require "telnet-client"))
+
 (def PACKAGE
   (if (js/fs.existsSync (str js/process.env.PWD "/package.json"))
     (js->clj (js/require (str js/process.env.PWD "/package.json")))
@@ -28,9 +30,6 @@
                            (let [idx (inc (.indexOf opts "-k"))]
                              (when (pos? idx)
                                (nth opts idx))))
-        opts           (clj->js (concat ["-c"
-                                         (str/join ":" (concat source-paths *classpath*))]
-                                        opts))
         invalid-cache! (fn []
                          (when cache-path
                            (let [files  (->> source-paths
@@ -52,25 +51,60 @@
                                        (js/fs.unlinkSync (str/replace cache #"js$" "cache.json"))))
                                    files
                                    caches)))))]
-    (fn [_]
-      (fn []
-        (invalid-cache!)
-        (some-> @process .kill)
-        (reset! process
-                (js/child_process.spawn "lumo" opts #js {:stdio "inherit"}))))))
+    (fn [next-handler]
+      (fn [fileset]
+        (let [opts (clj->js (concat ["-c"
+                                     (str/join ":" (concat source-paths (:classpath fileset)))]
+                                    opts))]
+          (invalid-cache!)
+          (some-> @process .kill)
+          (reset! process
+                  (js/child_process.spawn "lumo" opts #js {:stdio "inherit"}))
+          (next-handler))))))
 
 (defn ^:export watch [t file]
   (fn [next-handler]
-    (fn []
-      (next-handler)
+    (fn [fileset]
+      (next-handler fileset)
       (js/fs.watch file #js {:recursive (boolean (#{"-d" "--dir"} t))}
                    (fn [_ file]
                      (when-not (re-find #"\.#" file)
                        (println "\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ watch task ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n")
-                       (next-handler)))))))
+                       (next-handler (assoc fileset :reload file))))))))
 
-(defn run-task [task]
-  ((task identity)))
+(defn file->ns [file]
+  (-> file
+      (str/replace #"\.clj[sc]?" "")
+      (str/replace #"/" ".")
+      (str/replace #"_" "-")
+      symbol))
+
+(defn ^:export reload [host port]
+  (fn [next-handler]
+    (let [conn (atom nil)]
+      (fn reload* [fileset]
+        (if-let [conn @conn]
+          (when-let [file (:reload fileset)]
+            (.exec conn
+                   (str (pr-str `(require '~(file->ns file) :reload))
+                        \newline)
+                   (fn [err res])))
+          (let [c (new telnet)]
+            (doto c
+              (.on "ready" (fn [prompt]
+                             (reset! conn c)
+                             (reload*)))
+              (.on "data" (fn [buf] ;; (str buf) => "" ?
+                            ))
+              (.on "error" (fn [prompt]
+                             (js/setTimeout reload* 500)))
+              (.connect #js {:host        host
+                             :port        (js/parseInt port)
+                             :shellPrompt "cljs.user=> "
+                             :timeout     1500}))))))))
+
+(defn run-task [task fileset]
+  ((task (constantly :nothing)) fileset))
 
 (def NS-EXPORTS
   (reduce #(aget %1 (munge %2))
@@ -81,7 +115,7 @@
 (defn argv->task [argv]
   (let [task-specs (->> argv
                         (partition-by #(.hasOwnProperty NS-EXPORTS (munge %)))
-                        (partition 2))]
+                        (partition-all 2))]
     (apply comp (for [[[t] args] task-specs]
                   (do
                     (println "compile" (pr-str (cons t args)) "...")
@@ -90,7 +124,6 @@
 (defn -main [& argv]
   (mvn/async-map mvn/download-dep (map mvn/parse-dep (get-in PACKAGE ["cljs" "dependencies"]))
                  (fn [paths]
-                   (set! *classpath* paths)
-                   (run-task (argv->task argv)))))
+                   (run-task (argv->task argv) (assoc PACKAGE :classpath paths)))))
 
 

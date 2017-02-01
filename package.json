@@ -16,6 +16,7 @@
     "url": "https://github.com/gfZeng/cljs-boot.git"
   },
   "dependencies": {
-    "lumo-cljs": "*"
+    "lumo-cljs": "*",
+    "telnet-client": "^0.13.0"
   }
 }
