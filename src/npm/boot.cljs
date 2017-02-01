@@ -95,7 +95,7 @@
               (.on "ready" (fn [prompt]
                              (reset! conn c)
                              (reload*)))
-              (.on "data" #(println (str %)))
+              (.on "data" #(print (str %)))
               (.on "error" (fn [prompt]
                              (js/setTimeout reload* 500)))
               (.connect #js {:host        host
