@@ -11,13 +11,16 @@ Inspired by [[https://github.com/boot-clj/boot][boot-clj]], It's just has some s
 *** Tasks
     - lumo: a wrapper for [[https://github.com/anmonteiro/lumo][lumo]], auto invalid expired cache when enable cache
     - watch: auto re-run tasks of subsequent when listening file changed
-
+    - reload: reload modified namespaces
 *** Command line
    #+begin_src sh
    cljs-boot lumo -K -c src -m foo.bar
 
    # auto relaunch lumo when src modified
    cljs-boot watch -d src lumo -c src -K -m foo.bar
+   
+   # auto reload changed namespaces
+   cljs-boot lumo -K -m app.core watch -d src reload
    #+end_src
 
 *** As plugin for npm
