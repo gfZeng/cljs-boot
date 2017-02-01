@@ -60,7 +60,7 @@
           (some-> @process .kill)
           (reset! process
                   (js/child_process.spawn "lumo" opts #js {:stdio "inherit"}))
-          (next-handler))))))
+          (next-handler (assoc fileset :invalid-cache! invalid-cache!)))))))
 
 (defn ^:export watch [t file]
   (fn [next-handler]
@@ -85,7 +85,8 @@
       (fn reload* [fileset]
         (if-let [conn @conn]
           (when-let [file (:reload fileset)]
-            (.exec conn
+            ((:invalid-cache! fileset))
+            (.send conn
                    (str (pr-str `(require '~(file->ns file) :reload))
                         \newline)
                    (fn [err res])))
@@ -94,8 +95,7 @@
               (.on "ready" (fn [prompt]
                              (reset! conn c)
                              (reload*)))
-              (.on "data" (fn [buf] ;; (str buf) => "" ?
-                            ))
+              (.on "data" #(println (str %)))
               (.on "error" (fn [prompt]
                              (js/setTimeout reload* 500)))
               (.connect #js {:host        host
