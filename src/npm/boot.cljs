@@ -10,7 +10,7 @@
     (js->clj (js/require (str js/process.env.PWD "/package.json")))
     {"cljs" {"source-paths" ["src"]}}))
 
-(declare *classpath*)
+(declare reload)
 
 (defn file-seq [root]
   (tree-seq #(and (js/fs.existsSync %)
@@ -53,14 +53,22 @@
                                    caches)))))]
     (fn [next-handler]
       (fn [fileset]
-        (let [opts (clj->js (concat ["-c"
-                                     (str/join ":" (concat source-paths (:classpath fileset)))]
-                                    opts))]
+        (let [repl (let [idx (inc (.indexOf opts "-n"))]
+                     (when (pos? idx)
+                       (let [[host port] (str/split (nth opts idx) #":")]
+                         {:host host :port (js/parseInt port)})))
+              opts (clj->js (concat
+                             (when (and (not repl) (some #{reload} (:tasks fileset)))
+                               ["-n" "127.0.0.1:5555"])
+                             ["-c" (str/join ":" (concat source-paths (:classpath fileset)))]
+                             opts))]
           (invalid-cache!)
           (some-> @process .kill)
           (reset! process
                   (js/child_process.spawn "lumo" opts #js {:stdio "inherit"}))
-          (next-handler (assoc fileset :invalid-cache! invalid-cache!)))))))
+          (next-handler (assoc fileset
+                               :lumo/invalid-cache! invalid-cache!
+                               :lumo/repl (merge {:host "127.0.0.1" :port 5555} repl))))))))
 
 (defn ^:export watch [t file]
   (fn [next-handler]
@@ -79,13 +87,13 @@
       (str/replace #"_" "-")
       symbol))
 
-(defn ^:export reload [host port]
+(defn ^:export reload []
   (fn [next-handler]
     (let [conn (atom nil)]
-      (fn reload* [fileset]
+      (fn reload* [{:keys [lumo/repl] :as fileset}]
         (if-let [conn @conn]
           (when-let [file (:reload fileset)]
-            ((:invalid-cache! fileset))
+            ((:lumo/invalid-cache! fileset))
             (.send conn
                    (str (pr-str `(require '~(file->ns file) :reload))
                         \newline)
@@ -94,12 +102,12 @@
             (doto c
               (.on "ready" (fn [prompt]
                              (reset! conn c)
-                             (reload*)))
+                             (reload* fileset)))
               (.on "data" #(print (str %)))
               (.on "error" (fn [prompt]
-                             (js/setTimeout reload* 500)))
-              (.connect #js {:host        host
-                             :port        (js/parseInt port)
+                             (js/setTimeout #(reload* fileset) 500)))
+              (.connect #js {:host        (:host repl)
+                             :port        (:port repl)
                              :shellPrompt "cljs.user=> "
                              :timeout     1500}))))))))
 
@@ -124,6 +132,8 @@
 (defn -main [& argv]
   (mvn/async-map mvn/download-dep (map mvn/parse-dep (get-in PACKAGE ["cljs" "dependencies"]))
                  (fn [paths]
-                   (run-task (argv->task argv) (assoc PACKAGE :classpath paths)))))
+                   (run-task (argv->task argv)
+                             (assoc PACKAGE :classpath paths
+                                    :tasks (keep #(aget NS-EXPORTS (munge %)) argv))))))
 
 
