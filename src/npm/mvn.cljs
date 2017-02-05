@@ -5,12 +5,12 @@
   (let [[group artifact] (if (str/includes? dep "/")
                            (str/split dep #"/")
                            [dep dep])
-        dep-dir       (-> group (str/replace #"\." "/")
+        dep-dir          (-> group (str/replace #"\." "/")
                              (str "/" artifact "/" version))]
-    {:group      group
-     :artifact   artifact
-     :dep-dir dep-dir
-     :version    version}))
+    {:group    group
+     :artifact artifact
+     :dep-dir  dep-dir
+     :version  version}))
 
 (defn hiccup->xml [x]
   (cond
