@@ -94,10 +94,10 @@
 
 (defn async-pmap [f xs done]
   (let [cnt (atom (count xs))]
-    (reduce (fn [rets [i x]]
-              (f x (fn [ret]
-                     (assoc rets i ret)
-                     (when (zero? (swap! cnt dec))
-                       (done rets)))))
-            (vec (repeat @cnt nil))
-            (map vector (iterate inc 0) xs))))
+    (reduce-kv (fn [rets i x]
+                 (f x (fn [ret]
+                        (assoc rets i ret)
+                        (when (zero? (swap! cnt dec))
+                          (done rets)))))
+               (vec (repeat @cnt nil))
+               (vec xs))))
