@@ -32,25 +32,26 @@
                                (nth opts idx))))
         invalid-cache! (fn []
                          (when cache-path
-                           (let [files  (->> source-paths
-                                             (mapcat file-seq)
-                                             (remove #(re-find #"\.#" %))
-                                             (filter #(re-find #"\.clj[sc]$" %)))
-                                 caches (->> files
-                                             (map #(str/replace % source-pattern ""))
-                                             (map #(str/replace % #"\.clj[sc]" ".js"))
-                                             (map #(str cache-path \/ (munge %))))]
-                             (dorun
-                              (map (fn [file cache]
-                                     (when (and (js/fs.existsSync file)
-                                                (js/fs.existsSync cache)
-                                                (> (.-mtime (js/fs.statSync file))
-                                                   (.-mtime (js/fs.statSync cache))))
-                                       (println "invalid cache..." file)
-                                       (js/fs.unlinkSync cache)
-                                       (js/fs.unlinkSync (str/replace cache #"js$" "cache.json"))))
-                                   files
-                                   caches)))))]
+                           (let [files (->> source-paths
+                                            (mapcat file-seq)
+                                            (remove #(re-find #"\.#" %))
+                                            (filter #(re-find #"\.clj[sc]$" %)))]
+                             (doall
+                              (keep (fn [file]
+                                      (let [resource (str/replace file source-pattern "")
+                                            cache    (-> resource
+                                                         (str/replace #"\.clj[sc]" ".js")
+                                                         munge
+                                                         (->> (str cache-path \/)))]
+                                        (when (and (js/fs.existsSync file)
+                                                   (js/fs.existsSync cache)
+                                                   (> (.-mtime (js/fs.statSync file))
+                                                      (.-mtime (js/fs.statSync cache))))
+                                          (println "invalid cache..." file)
+                                          (js/fs.unlinkSync cache)
+                                          (js/fs.unlinkSync (str/replace cache #"js$" "cache.json"))
+                                          resource)))
+                                    files)))))]
     (fn [next-handler]
       (fn [fileset]
         (let [repl (let [idx (inc (.indexOf opts "-n"))]
@@ -93,17 +94,19 @@
       (fn reload* [{:keys [lumo/repl] :as fileset}]
         (if-let [conn @conn]
           (when-let [file (:reload fileset)]
-            ((:lumo/invalid-cache! fileset))
-            (.send conn
-                   (str (pr-str `(require '~(file->ns file) :reload))
-                        \newline)
-                   (fn [err res])))
+            (when-let [resources (seq ((:lumo/invalid-cache! fileset)))]
+              (.send conn
+                     (str (pr-str `(require '~@(map file->ns resources) :reload))
+                          \newline)
+                     (fn [err res]))))
           (let [c (new telnet)]
             (doto c
               (.on "ready" (fn [prompt]
                              (reset! conn c)
                              (reload* fileset)))
-              (.on "data" #(print (str %)))
+              (.on "data" #(when-let [s (not-empty (str %))]
+                             (when-not (str/starts-with? (str/trim s) "cljs.user=>")
+                               (print s))))
               (.on "error" (fn [prompt]
                              (js/setTimeout #(reload* fileset) 500)))
               (.connect #js {:host        (:host repl)

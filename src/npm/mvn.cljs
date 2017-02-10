@@ -1,4 +1,5 @@
 (ns npm.mvn
+  (:require-macros [npm.macros :refer [defn-async let-async]])
   (:require [clojure.string :as str]))
 
 (defn parse-dep [[dep version]]
@@ -69,20 +70,39 @@
          (recur dir (cons sub subs)))))
    (str/replace dir #"^(?!/)" "./") ()))
 
-(defn download-dep [{:keys [dep-dir artifact version]} done]
+(defn-async http-copy [url path]
+  (if (js/fs.existsSync path)
+    (&async path)
+    (let [file-stream (js/fs.createWriteStream path)]
+      (println "downloading..." url)
+      (js/https.get url #(.pipe % file-stream))
+      (.on file-stream "finish"
+           (fn []
+             (.close file-stream)
+             (&async path))))))
+
+(defn download-dep [{:keys [dep-dir artifact version] :as dep} done]
   (ensure-dir! (str js/process.env.HOME "/.m2/repository/" dep-dir))
-  (let [dep-path    (str dep-dir \/ artifact "-" version ".jar")
-        file-path   (str js/process.env.HOME "/.m2/repository/" dep-path)]
-    (if (js/fs.existsSync file-path)
+  (let-async [dep-path  (str dep-dir \/ artifact "-" version ".jar")
+
+              file-path (str js/process.env.HOME "/.m2/repository/" dep-path)
+              file-url  (str "https://clojars.org/repo/" dep-path)
+
+              sha1-path (str file-path ".sha1")
+              sha1-url  (str file-url ".sha1")
+
+              sha1-path ^:async (http-copy sha1-url sha1-path)
+              file-path ^:async (http-copy file-url file-path)
+
+              shasum    (-> (str "shasum " file-path)
+                            (str " | awk '{print $1}'")
+                            js/child_process.execSync
+                            str
+                            str/trim)]
+    (if (= shasum (str/trim (str (js/fs.readFileSync sha1-path))))
       (done file-path)
-      (let [file-stream (js/fs.createWriteStream file-path)]
-        (println "downloading..." (str "https://clojars.org/repo/" dep-path))
-        (js/https.get (str "https://clojars.org/repo/" dep-path)
-                      #(.pipe % file-stream))
-        (.on file-stream "finish"
-             (fn []
-               (.close file-stream)
-               (done file-path)))))))
+      (js/fs.unlink file-path (fn [e]
+                                (download-dep dep done))))))
 
 (defn async-map [f xs done]
   ((fn step [[x & xs] acc]
