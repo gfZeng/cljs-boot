@@ -3,7 +3,7 @@
             [cljs.analyzer.api :as analy]
             [npm.mvn :as mvn]))
 
-(def telnet (js/require "telnet-client"))
+(def Telnet (js/require "telnet-client"))
 
 (def PACKAGE
   (if (js/fs.existsSync (str js/process.env.PWD "/package.json"))
@@ -11,6 +11,15 @@
     {"cljs" {"source-paths" ["src"]}}))
 
 (declare reload)
+
+(let [processers (atom nil)]
+  (defn spawnx [key cmd opts conf]
+    (let [p    (atom nil)
+          opts (clj->js (vec opts))
+          conf (clj->js conf)]
+      (some-> @p (get key) .kill)
+      (swap! processers assoc key
+             (js/child_process.spawn cmd opts conf)))))
 
 (defn file-seq [root]
   (tree-seq #(and (js/fs.existsSync %)
@@ -22,8 +31,7 @@
             root))
 
 (defn ^:export lumo [& opts]
-  (let [process        (atom nil)
-        source-paths   (get-in PACKAGE ["cljs" "source-paths"])
+  (let [source-paths   (get-in PACKAGE ["cljs" "source-paths"])
         source-pattern (re-pattern (str \( (str/join "|" source-paths) \) "/?"))
         cache-path     (or (when (some #{"-K"} opts)
                              ".lumo_cache")
@@ -64,9 +72,7 @@
                              ["-c" (str/join ":" (concat source-paths (:classpath fileset)))]
                              opts))]
           (invalid-cache!)
-          (some-> @process .kill)
-          (reset! process
-                  (js/child_process.spawn "lumo" opts #js {:stdio "inherit"}))
+          (spawnx ::lumo "lumo" opts #js {:stdio "inherit"})
           (next-handler (assoc fileset
                                :lumo/invalid-cache! invalid-cache!
                                :lumo/repl (merge {:host "127.0.0.1" :port 5555} repl))))))))
@@ -99,7 +105,7 @@
                      (str (pr-str `(require '~@(map file->ns resources) :reload))
                           \newline)
                      (fn [err res]))))
-          (let [c (new telnet)]
+          (let [c (Telnet.)]
             (doto c
               (.on "ready" (fn [prompt]
                              (reset! conn c)
@@ -113,6 +119,13 @@
                              :port        (:port repl)
                              :shellPrompt "cljs.user=> "
                              :timeout     1500}))))))))
+
+(defn ^:export exec [cmd & opts]
+  (fn [next-handler]
+    (fn [fileset]
+      (spawnx (str "exec-" cmd) cmd (clj->js opts) #js {:stdio "inherit"}))))
+
+(def ^:export node (partial exec "node"))
 
 (defn run-task [task fileset]
   ((task (constantly :nothing)) fileset))
@@ -129,7 +142,7 @@
                         (partition-all 2))]
     (apply comp (for [[[t] args] task-specs]
                   (do
-                    (println "compile" (pr-str (cons t args)) "...")
+                    (println "compile" (pr-str (cons (symbol t) args)) "...")
                     (apply (aget NS-EXPORTS (munge t)) args))))))
 
 (defn -main [& argv]
